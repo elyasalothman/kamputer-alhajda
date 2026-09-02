@@ -1,1 +1,6 @@
 كمبيوتر الهجدة 1.0.0 — مثبّت ويندوز لإلياس بن عثمان العثمان فقط.
+
+https://github.com/elyasalothman/kamputer-alhajda/releases/download/v1.0.0/Kamputer-Alhajda-1.0.0-Setup.exe
+
+bytes: 84478320
+sha256: b08df2e5e74d7cbd41d44ab467f53d44535726ad5dfebd26f7a6e613dfff154c
