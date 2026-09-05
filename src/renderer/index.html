@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>كمبيوتر الهجدة</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="hero">
+        <div class="brand">
+          <div class="logo" aria-hidden="true">ك</div>
+          <div class="brand-text">
+            <h1>كمبيوتر الهجدة</h1>
+            <p class="tagline">لوحة سطح المكتب الشخصية</p>
+          </div>
+        </div>
+        <div class="clock" id="clock">--:--:--</div>
+      </header>
+
+      <section class="welcome" id="welcome">
+        <h2>أهلاً بك، <span id="owner">…</span></h2>
+        <p>هذا جهازك الشخصي. فيما يلي حالة النظام في الوقت الحالي.</p>
+      </section>
+
+      <section class="grid" id="cards" aria-live="polite">
+        <div class="card"><span class="label">النظام</span><span class="value" id="platform">…</span></div>
+        <div class="card"><span class="label">المعالج</span><span class="value" id="cpu">…</span></div>
+        <div class="card"><span class="label">عدد الأنوية</span><span class="value" id="cores">…</span></div>
+        <div class="card"><span class="label">الذاكرة الكلية</span><span class="value" id="mem">…</span></div>
+        <div class="card"><span class="label">الذاكرة المتاحة</span><span class="value" id="freemem">…</span></div>
+        <div class="card"><span class="label">اسم الجهاز</span><span class="value" id="host">…</span></div>
+        <div class="card"><span class="label">مدة التشغيل</span><span class="value" id="uptime">…</span></div>
+        <div class="card"><span class="label">المعمارية</span><span class="value" id="arch">…</span></div>
+      </section>
+
+      <footer class="footer">
+        <div class="versions">
+          <span>الإصدار <b id="appver">…</b></span>
+          <span>Electron <b id="ever">…</b></span>
+          <span>Chromium <b id="cver">…</b></span>
+          <span>Node <b id="nver">…</b></span>
+        </div>
+        <button class="refresh" id="refresh" type="button">تحديث الحالة</button>
+      </footer>
+    </div>
+    <script src="renderer.js"></script>
+  </body>
+</html>

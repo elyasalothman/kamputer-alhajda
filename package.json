@@ -1,0 +1,50 @@
+{
+  "name": "kamputer-alhajda",
+  "productName": "Kamputer Alhajda",
+  "version": "1.0.0",
+  "description": "كمبيوتر الهجدة — تطبيق سطح مكتب شخصي لإلياس بن عثمان العثمان.",
+  "author": "Elyas Al-Othman <elyas@example.com>",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "dist:win": "electron-builder --win --x64 --publish never",
+    "pack": "electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.elyasalothman.kamputeralhajda",
+    "productName": "كمبيوتر الهجدة",
+    "artifactName": "Kamputer-Alhajda-${version}-Setup.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "كمبيوتر الهجدة"
+    }
+  }
+}
