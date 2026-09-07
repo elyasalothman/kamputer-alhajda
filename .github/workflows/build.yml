@@ -31,16 +31,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload installer artifact
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Kamputer-Alhajda-Setup
-          path: dist/*Setup.exe
+          name: Kamputer-Alhajda-Windows
+          path: |
+            dist/*Setup.exe
+            dist/*win-x64.zip
           if-no-files-found: error
 
       - name: Publish installer to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*Setup.exe
+          files: |
+            dist/*Setup.exe
+            dist/*win-x64.zip
           fail_on_unmatched_files: true

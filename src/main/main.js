@@ -5,6 +5,13 @@ const os = require('os');
 const path = require('path');
 
 const OWNER_NAME = 'إلياس بن عثمان العثمان';
+const PRODUCT_NAME = 'كمبيوتر الهجدة';
+const APP_USER_MODEL_ID = 'com.elyasalothman.kamputeralhajda';
+
+app.setName(PRODUCT_NAME);
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_USER_MODEL_ID);
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -13,7 +20,7 @@ function createWindow() {
     minWidth: 820,
     minHeight: 560,
     backgroundColor: '#0b1020',
-    title: 'كمبيوتر الهجدة',
+    title: PRODUCT_NAME,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
