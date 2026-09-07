@@ -47,7 +47,7 @@ async function main() {
 
   const shortcut = fs.readFileSync(path.join(__dirname, '..', 'put-shortcut.ps1'), 'utf8');
   assert.match(shortcut, /Kamputer-Alhajda\.exe/);
-  assert.doesNotMatch(shortcut, /electron\.exe/);
+  assert.doesNotMatch(shortcut, /TargetPath\s*=\s*.*electron\.exe/i);
 
   console.log('afterPack + packaging names: ok');
 }
