@@ -1,0 +1,71 @@
+{
+  "name": "kamputer-alhajda",
+  "productName": "كمبيوتر الهجدة",
+  "version": "1.0.0",
+  "description": "كمبيوتر الهجدة — تطبيق سطح مكتب شخصي لإلياس بن عثمان العثمان.",
+  "author": "Elyas Al-Othman <elyas@example.com>",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "dist:win": "electron-builder --win --x64 --publish never",
+    "pack": "electron-builder --dir",
+    "test": "node scripts/afterPack.test.js"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.elyasalothman.kamputeralhajda",
+    "productName": "كمبيوتر الهجدة",
+    "executableName": "Kamputer-Alhajda",
+    "artifactName": "Kamputer-Alhajda-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraFiles": [
+      {
+        "from": "START.bat",
+        "to": "START.bat"
+      },
+      {
+        "from": "put-shortcut.ps1",
+        "to": "put-shortcut.ps1"
+      }
+    ],
+    "afterPack": "./scripts/afterPack.js",
+    "win": {
+      "executableName": "Kamputer-Alhajda",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "artifactName": "Kamputer-Alhajda-${version}-Setup.${ext}",
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "كمبيوتر الهجدة"
+    }
+  }
+}

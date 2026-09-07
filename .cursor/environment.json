@@ -1,0 +1,10 @@
+{
+  "name": "Kamputer Alhajda",
+  "install": "npm install",
+  "terminals": [
+    {
+      "name": "electron",
+      "command": "xvfb-run -a npm start"
+    }
+  ]
+}
