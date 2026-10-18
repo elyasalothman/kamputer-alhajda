@@ -12,7 +12,7 @@
 | سطح المكتب | XFCE خفيف (Xubuntu core) + LightDM |
 | اللغة | العربية افتراضياً (`ar_SA.UTF-8`) والواجهة من اليمين لليسار، والإنجليزية متوفرة |
 | الخطوط | Noto Naskh Arabic، Noto Kufi Arabic، Noto Sans Arabic UI، Noto Color Emoji |
-| لوحة المفاتيح | عربي + إنجليزي، التبديل بـ **Alt+Shift** |
+| لوحة المفاتيح | عربي (`ara`) + إنجليزي (`us`)، التبديل بـ **Alt+Shift** |
 | المنطقة الزمنية | Asia/Riyadh |
 | المتصفح | Firefox (حزمة deb من Mozilla، بدون Snap) بواجهة عربية، الصفحة الرئيسية alhajda.com وشريط إشارات «الهجدة» |
 | برامج ويندوز | Wine (64 و32 بت) + winetricks، و **Bottles** يُثبَّت تلقائياً من Flathub عند أول اتصال بالإنترنت (أو مدمج إذا بُني بخيار `bottles_preinstall`) |

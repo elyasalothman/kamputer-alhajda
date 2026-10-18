@@ -68,6 +68,8 @@ autologin-session=\$SESSION
 user-session=\$SESSION
 EOF
 echo alhajda > /etc/hostname
+# installed system: no live-ISO integrity check
+systemctl mask casper-md5check.service || true
 # BIOS
 grub-install --target=i386-pc --recheck "${LOOP}"
 # UEFI (signed shim+grub): fallback path \EFI\BOOT\BOOTX64.EFI and \EFI\ubuntu

@@ -9,7 +9,7 @@ for _ in $(seq 1 60); do
 done
 mode=disk; grep -qw 'boot=casper' /proc/cmdline && mode=live
 name=$(. /etc/os-release; echo "$PRETTY_NAME")
-msg="ALHAJDA_BOOT_OK mode=${mode} display-manager=${state} locale=$(. /etc/default/locale; echo "$LANG") os=\"${name}\""
+msg="ALHAJDA_BOOT_OK mode=${mode} display-manager=${state} xkb=$(. /etc/default/keyboard; echo "$XKBLAYOUT") locale=$(. /etc/default/locale; echo "$LANG") os=\"${name}\""
 [ "$state" = "active" ] || msg="ALHAJDA_BOOT_DEGRADED mode=${mode} display-manager=${state}"
 echo "$msg" | systemd-cat -t alhajda-bootcheck
 failed=$(systemctl --failed --no-legend --plain 2>/dev/null | awk '{print $1}' | tr '\n' ' ')

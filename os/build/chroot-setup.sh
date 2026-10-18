@@ -47,14 +47,14 @@ ln -sf /usr/share/zoneinfo/Asia/Riyadh /etc/localtime
 echo Asia/Riyadh > /etc/timezone
 cat > /etc/default/keyboard <<'EOF'
 XKBMODEL="pc105"
-XKBLAYOUT="ar,us"
+XKBLAYOUT="ara,us"
 XKBVARIANT=","
 XKBOPTIONS="grp:alt_shift_toggle,grp_led:scroll"
 BACKSPACE="guess"
 EOF
 cat <<'EOF' | debconf-set-selections
-keyboard-configuration keyboard-configuration/layoutcode string ar,us
-keyboard-configuration keyboard-configuration/xkb-keymap select ar
+keyboard-configuration keyboard-configuration/layoutcode string ara,us
+keyboard-configuration keyboard-configuration/xkb-keymap select ara
 grub-pc grub-pc/install_devices_empty boolean true
 grub-pc grub-pc/install_devices multiselect
 grub-efi-amd64 grub2/update_nvram boolean false

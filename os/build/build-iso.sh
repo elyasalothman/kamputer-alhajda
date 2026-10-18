@@ -25,6 +25,9 @@ mksquashfs "${CHROOT}" "${ISO_DIR}/casper/filesystem.squashfs" \
   -noappend -comp xz -Xbcj x86 -b 1M -processors "$(nproc)" -no-progress \
   -wildcards -e 'proc/*' 'sys/*' 'dev/*' 'run/*' 'tmp/*' 'boot/efi/*'
 
+# checksums for casper-md5check ("Verify Live ISO checksums" at boot)
+( cd "${ISO_DIR}" && find . -type f ! -name md5sum.txt -print0 | sort -z | xargs -0 md5sum > md5sum.txt )
+
 cat > "${ISO_DIR}/boot/grub/grub.cfg" <<'EOF'
 set default=0
 set timeout=5
