@@ -18,9 +18,11 @@ log "debootstrap ${UBUNTU_SUITE} -> ${CHROOT}"
 rm -rf "${CHROOT}"
 mkdir -p "${CHROOT}" "${OUT}"
 # mirrors occasionally drop a package mid-download: retry a few times
+# the last attempt falls back to the main Ubuntu archive in case the regional mirror is broken
 for attempt in 1 2 3; do
+  mirror="${UBUNTU_MIRROR}"; [ "$attempt" = 3 ] && mirror="http://archive.ubuntu.com/ubuntu"
   if debootstrap --arch=amd64 --components=main,restricted,universe,multiverse \
-       "${UBUNTU_SUITE}" "${CHROOT}" "${UBUNTU_MIRROR}"; then break; fi
+       "${UBUNTU_SUITE}" "${CHROOT}" "${mirror}"; then break; fi
   [ "$attempt" = 3 ] && { echo "debootstrap failed 3 times"; exit 1; }
   echo "debootstrap failed (attempt ${attempt}), retrying in 20s"; sleep 20
   rm -rf "${CHROOT}"; mkdir -p "${CHROOT}"
