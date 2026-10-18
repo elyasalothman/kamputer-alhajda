@@ -1,0 +1,15 @@
+#!/bin/bash
+# Install Bottles (runs Windows programs with Wine) from Flathub. Retries every boot until it works.
+set -u
+mkdir -p /var/lib/alhajda
+[ -e /var/lib/alhajda/bottles-installed ] && exit 0
+for _ in $(seq 1 30); do
+  getent hosts dl.flathub.org >/dev/null && break
+  sleep 10
+done
+flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo || exit 0
+if flatpak install --system -y --noninteractive flathub com.usebottles.bottles; then
+  touch /var/lib/alhajda/bottles-installed
+  echo "Bottles installed" | systemd-cat -t alhajda-bottles
+fi
+exit 0

@@ -1,0 +1,18 @@
+#!/bin/bash
+# Prints a boot marker to the first serial port so headless VMs / CI can tell the
+# desktop came up. Harmless on real hardware.
+state="inactive"
+for _ in $(seq 1 60); do
+  state=$(systemctl is-active display-manager.service 2>/dev/null || true)
+  [ "$state" = "active" ] && break
+  sleep 2
+done
+mode=disk; grep -qw 'boot=casper' /proc/cmdline && mode=live
+name=$(. /etc/os-release; echo "$PRETTY_NAME")
+msg="ALHAJDA_BOOT_OK mode=${mode} display-manager=${state} locale=$(. /etc/default/locale; echo "$LANG") os=\"${name}\""
+[ "$state" = "active" ] || msg="ALHAJDA_BOOT_DEGRADED mode=${mode} display-manager=${state}"
+echo "$msg" | systemd-cat -t alhajda-bootcheck
+for tty in /dev/ttyS0 /dev/hvc0; do
+  [ -c "$tty" ] && { echo "$msg" > "$tty"; } 2>/dev/null || true
+done
+exit 0

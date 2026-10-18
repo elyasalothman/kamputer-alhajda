@@ -1,0 +1,13 @@
+[Unit]
+Description=Alhajda boot check (writes ALHAJDA_BOOT_OK to the serial port)
+After=display-manager.service
+Wants=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/alhajda-bootcheck
+TimeoutStartSec=150
+RemainAfterExit=yes
+
+[Install]
+WantedBy=graphical.target

@@ -1,0 +1,16 @@
+{
+  "policies": {
+    "Homepage": { "URL": "https://alhajda.com/", "StartPage": "homepage", "Locked": false },
+    "OverrideFirstRunPage": "https://alhajda.com/",
+    "OverridePostUpdatePage": "",
+    "DisplayBookmarksToolbar": "always",
+    "RequestedLocales": ["ar", "en-US"],
+    "ManagedBookmarks": [
+      { "toplevel_name": "الهجدة" },
+      { "name": "الهجدة", "url": "https://alhajda.com/" },
+      { "name": "سوق الهجدة", "url": "https://market.alhajda.com/" },
+      { "name": "أخبار الهجدة", "url": "https://news.alhajda.com/" }
+    ],
+    "DisableTelemetry": true
+  }
+}

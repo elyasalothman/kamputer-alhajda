@@ -1,0 +1,104 @@
+#!/bin/bash
+# alhajda-install-disk — EXPERIMENTAL dual-boot installer (run from the Alhajda LIVE session).
+#
+# ⚠️  تحذير: هذا مسار متقدّم وخطِر. خذ نسخة احتياطية كاملة من ويندوز وملفاتك قبل التشغيل.
+#     السكربت لا ينشئ ولا يحذف ولا يغيّر حجم أي قسم. يهيّئ (يمسح) فقط القسم الذي تحدّده
+#     بنفسك بعد أن تكتب اسمه حرفياً للتأكيد.
+#
+# What it does:
+#   1. formats ONLY the partition you pass with --target (must be empty/unformatted or ext*)
+#   2. copies the live system to it
+#   3. installs GRUB to the existing EFI System Partition as \EFI\ubuntu (Windows' own
+#      \EFI\Microsoft files are not touched) and adds Windows to the GRUB menu (os-prober)
+#
+# Prepare the partition yourself first, e.g. in Windows "Disk Management":
+#   shrink C: → New Simple Volume → "Do not format this volume" (≥ 25 GB).
+#
+# Usage: sudo alhajda-install-disk --target /dev/nvme0n1p5 [--efi /dev/nvme0n1p1] [--user NAME]
+set -euo pipefail
+
+die() { echo "خطأ / ERROR: $*" >&2; exit 1; }
+TARGET="" EFI="" NEWUSER="alhajda" MNT=/mnt/alhajda-target
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --target) TARGET="$2"; shift 2;;
+    --efi)    EFI="$2"; shift 2;;
+    --user)   NEWUSER="$2"; shift 2;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0;;
+    *) die "unknown option $1";;
+  esac
+done
+
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+[ -n "$TARGET" ] || { lsblk -o NAME,SIZE,FSTYPE,LABEL,PARTTYPENAME,MOUNTPOINTS; die "pass --target /dev/XXX (see the list above)"; }
+SRC=/rofs
+[ -d "$SRC/usr" ] || die "run this from the Alhajda live session (no $SRC found)"
+[ -d /sys/firmware/efi ] || die "the PC was not booted in UEFI mode; this installer supports UEFI only"
+[ -b "$TARGET" ] || die "$TARGET is not a block device"
+[ "$(lsblk -dno TYPE "$TARGET")" = "part" ] || die "$TARGET is not a partition (refusing to touch a whole disk)"
+findmnt -rno TARGET -S "$TARGET" >/dev/null && die "$TARGET is mounted"
+
+FST=$(lsblk -dno FSTYPE "$TARGET" || true)
+case "$FST" in
+  ""|ext2|ext3|ext4) ;;
+  *) die "$TARGET contains a '$FST' filesystem (Windows/BitLocker/EFI/swap?) — refusing. Create an EMPTY partition in Windows first.";;
+esac
+SIZE=$(lsblk -bdno SIZE "$TARGET")
+[ "$SIZE" -ge $((20*1024*1024*1024)) ] || die "$TARGET is smaller than 20 GB"
+
+DISK="/dev/$(lsblk -dno PKNAME "$TARGET")"
+if [ -z "$EFI" ]; then
+  EFI=$(lsblk -rpno NAME,PARTTYPE "$DISK" | awk 'tolower($2)=="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"{print $1; exit}')
+fi
+[ -n "$EFI" ] && [ -b "$EFI" ] || die "no EFI System Partition found on $DISK (use --efi)"
+[ "$(lsblk -dno FSTYPE "$EFI")" = "vfat" ] || die "$EFI is not FAT32"
+
+echo
+lsblk -o NAME,SIZE,FSTYPE,LABEL,PARTTYPENAME "$DISK"
+echo
+echo "سيتم مسح القسم:   $TARGET  ($((SIZE/1024/1024/1024)) GB, fstype='${FST:-none}')"
+echo "قسم الإقلاع EFI:  $EFI  (سيُضاف مجلد EFI/ubuntu فقط؛ ملفات ويندوز لا تُلمس)"
+echo "This will ERASE $TARGET. Make sure you have a backup."
+read -r -p "اكتب اسم القسم حرفياً للتأكيد / type '$TARGET' to confirm: " ans
+[ "$ans" = "$TARGET" ] || die "not confirmed"
+
+mkfs.ext4 -F -L alhajda-root "$TARGET"
+mkdir -p "$MNT"
+mount "$TARGET" "$MNT"
+cleanup() { for m in boot/efi dev/pts dev proc sys run; do mountpoint -q "$MNT/$m" && umount -lf "$MNT/$m"; done; umount -lf "$MNT" 2>/dev/null || true; }
+trap cleanup EXIT
+
+echo "نسخ النظام… / copying system (several minutes)"
+rsync -aHAX --info=progress2 "$SRC/" "$MNT/"
+mkdir -p "$MNT/boot/efi"
+mount "$EFI" "$MNT/boot/efi"
+for m in dev dev/pts proc sys run; do mount --bind "/$m" "$MNT/$m"; done
+
+ROOT_UUID=$(blkid -s UUID -o value "$TARGET")
+EFI_UUID=$(blkid -s UUID -o value "$EFI")
+cat > "$MNT/etc/fstab" <<EOF
+UUID=$ROOT_UUID  /          ext4  errors=remount-ro  0 1
+UUID=$EFI_UUID   /boot/efi  vfat  umask=0077         0 1
+EOF
+echo "GRUB_DISABLE_OS_PROBER=false" > "$MNT/etc/default/grub.d/90-dualboot.cfg"
+: > "$MNT/etc/machine-id"
+
+chroot "$MNT" /bin/bash -e <<CHROOT
+export DEBIAN_FRONTEND=noninteractive
+dpkg --purge casper || true
+systemctl disable alhajda-growroot.service || true
+groups=\$(for g in sudo adm cdrom dip plugdev lpadmin netdev; do getent group \$g >/dev/null && printf '%s,' \$g; done)
+id "$NEWUSER" >/dev/null 2>&1 || useradd -m -s /bin/bash -G "\${groups%,}" "$NEWUSER"
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ubuntu --uefi-secure-boot --recheck
+update-initramfs -u -k all
+update-grub
+CHROOT
+
+echo "اختر كلمة مرور للمستخدم $NEWUSER / set a password for $NEWUSER:"
+chroot "$MNT" passwd "$NEWUSER"
+
+echo
+echo "تم التثبيت ✔  أعد التشغيل. ستظهر قائمة GRUB وفيها «Alhajda» و«Windows Boot Manager»."
+echo "Done. Reboot; GRUB will list Alhajda and Windows. To make Windows the default again,"
+echo "change the boot order in your UEFI/BIOS setup or with 'efibootmgr'."

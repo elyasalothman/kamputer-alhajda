@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1f3a"/>
+      <stop offset="0.55" stop-color="#0f3d4a"/>
+      <stop offset="1" stop-color="#11695f"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.72" cy="0.3" r="0.45">
+      <stop offset="0" stop-color="#e8c26a" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#e8c26a" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="star" width="120" height="120" patternUnits="userSpaceOnUse">
+      <g fill="none" stroke="#ffffff" stroke-opacity="0.05" stroke-width="2">
+        <rect x="35" y="35" width="50" height="50"/>
+        <rect x="35" y="35" width="50" height="50" transform="rotate(45 60 60)"/>
+      </g>
+    </pattern>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <rect width="1920" height="1080" fill="url(#star)"/>
+  <rect width="1920" height="1080" fill="url(#glow)"/>
+  <!-- crescent -->
+  <mask id="cres"><rect width="1920" height="1080" fill="#fff"/><circle cx="1425" cy="300" r="112" fill="#000"/></mask>
+  <circle cx="1380" cy="330" r="120" fill="#e8c26a" fill-opacity="0.9" mask="url(#cres)"/>
+  <text x="960" y="610" text-anchor="middle" direction="rtl"
+        font-family="Noto Kufi Arabic, Noto Naskh Arabic, sans-serif" font-weight="700"
+        font-size="190" fill="#ffffff" fill-opacity="0.95">الهجدة</text>
+  <text x="960" y="700" text-anchor="middle"
+        font-family="Noto Sans, sans-serif" font-size="44" letter-spacing="14"
+        fill="#e8c26a" fill-opacity="0.9">ALHAJDA OS</text>
+</svg>

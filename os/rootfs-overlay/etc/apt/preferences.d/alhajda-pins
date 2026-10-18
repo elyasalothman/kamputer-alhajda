@@ -1,0 +1,16 @@
+# Alhajda: no snaps. Firefox comes from Mozilla's APT repository as a real .deb.
+Package: snapd
+Pin: release a=*
+Pin-Priority: -10
+
+Package: firefox*
+Pin: origin packages.mozilla.org
+Pin-Priority: 1000
+
+Package: firefox*
+Pin: release o=Ubuntu
+Pin-Priority: -1
+
+Package: thunderbird* chromium-browser*
+Pin: release o=Ubuntu
+Pin-Priority: -1

@@ -1,0 +1,14 @@
+[Unit]
+Description=Alhajda: grow the root partition to fill the virtual disk
+ConditionKernelCommandLine=!boot=casper
+ConditionPathExists=!/var/lib/alhajda/growroot-disabled
+After=local-fs.target
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/alhajda-growroot
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

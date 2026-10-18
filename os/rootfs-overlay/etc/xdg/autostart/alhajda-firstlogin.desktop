@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Alhajda first login
+Name[ar]=إعداد الهجدة لأول دخول
+Exec=/usr/local/bin/alhajda-firstlogin
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

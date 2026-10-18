@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Alhajda News
+Name[ar]=أخبار الهجدة
+Comment=news.alhajda.com
+Exec=firefox --new-window https://news.alhajda.com
+Icon=/usr/share/alhajda/icons/alhajda.png
+Terminal=false
+Categories=Network;WebBrowser;
+StartupNotify=true

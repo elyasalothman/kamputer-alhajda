@@ -1,0 +1,171 @@
+name: Build Alhajda OS
+
+# Builds «الهجدة» (Ubuntu 24.04 based) live ISO + VM disks (VHDX / VMDK / qcow2),
+# boots them headless in QEMU, uploads artifacts, and optionally publishes a GitHub Release.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "OS version (e.g. 1.0.0)"
+        default: "1.0.0"
+        required: true
+      publish:
+        description: "Publish a GitHub (pre)release os-v<version> with the images"
+        type: boolean
+        default: false
+      bottles_preinstall:
+        description: "Bake Bottles (flatpak) into the image (+~1.5 GB). Otherwise it installs on first online boot."
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: alhajda-os-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash syntax + shellcheck
+        run: |
+          set -e
+          for f in os/build/*.sh os/rootfs-overlay/usr/local/sbin/* os/rootfs-overlay/usr/local/bin/*; do
+            bash -n "$f"
+          done
+          shellcheck -S error os/build/*.sh os/rootfs-overlay/usr/local/sbin/* os/rootfs-overlay/usr/local/bin/*
+      - name: PowerShell syntax
+        shell: pwsh
+        run: |
+          $bad = 0
+          Get-ChildItem os/windows -Filter *.ps1 | ForEach-Object {
+            $t = $null; $e = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$t, [ref]$e) | Out-Null
+            if ($e.Count) { $bad++; $e | ForEach-Object { Write-Host "::error file=$($_.Extent.File),line=$($_.Extent.StartLineNumber)::$($_.Message)" } }
+            else { Write-Host "OK $($_.Name)" }
+          }
+          if ($bad) { exit 1 }
+      - name: JSON
+        run: python3 -m json.tool os/branding/firefox-policies.json > /dev/null
+
+  build:
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      ALHAJDA_VERSION: ${{ inputs.version }}
+      BOTTLES_PREINSTALL: ${{ inputs.bottles_preinstall }}
+      UBUNTU_MIRROR: http://azure.archive.ubuntu.com/ubuntu
+      WORK: /mnt/alhajda-work
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          df -h / /mnt
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost || true
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          sudo mkdir -p "$WORK" && sudo chown "$USER" "$WORK"
+          df -h / /mnt
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debootstrap squashfs-tools xorriso mtools grub-pc-bin grub-efi-amd64-bin \
+            grub-common dosfstools gdisk qemu-utils qemu-system-x86 ovmf socat imagemagick zip rsync
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
+          ls -l /dev/kvm || echo "no KVM — smoke tests will be slow (TCG)"
+
+      - name: Build rootfs (debootstrap + XFCE + Arabic + Wine + Firefox)
+        run: sudo -E bash os/build/build-rootfs.sh
+
+      - name: Build live ISO
+        run: sudo -E bash os/build/build-iso.sh
+
+      - name: Build VM disk images (VHDX / VMDK / qcow2)
+        run: sudo -E bash os/build/build-disk.sh
+
+      - name: Branding preview
+        if: always()
+        run: |
+          mkdir -p "$WORK/smoke"
+          sudo cp "$WORK/chroot/usr/share/backgrounds/alhajda/alhajda-wallpaper.png" "$WORK/smoke/wallpaper-preview.png" || true
+          sudo cp "$WORK/chroot/usr/share/alhajda/icons/alhajda-logo.png" "$WORK/smoke/logo-preview.png" || true
+          sudo chown -R "$USER" "$WORK/smoke" "$WORK/out" || true
+          cat "$WORK/chroot/etc/os-release" || true
+
+      - name: Smoke test — VM disk, BIOS (raw)
+        run: bash os/build/smoke-test.sh disk-bios bios disk "$WORK/alhajda-${ALHAJDA_VERSION}.raw" raw 900
+
+      - name: Smoke test — VHDX, UEFI (Hyper-V Gen2 path)
+        run: bash os/build/smoke-test.sh vhdx-uefi uefi disk "$WORK/out/alhajda-${ALHAJDA_VERSION}-hyperv.vhdx" vhdx 900
+
+      - name: Smoke test — live ISO, BIOS
+        run: bash os/build/smoke-test.sh iso-bios bios cdrom "$WORK/out/alhajda-${ALHAJDA_VERSION}-amd64.iso" raw 1200
+
+      - name: Upload smoke logs + screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alhajda-smoke-logs
+          path: /mnt/alhajda-work/smoke/
+          if-no-files-found: warn
+
+      - name: Package (zip / checksums / split)
+        run: |
+          sudo rm -f "$WORK/alhajda-${ALHAJDA_VERSION}.raw"
+          sudo rm -rf "$WORK/chroot"
+          bash os/build/package.sh
+          df -h /mnt
+
+      - name: Upload ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: alhajda-${{ inputs.version }}-iso
+          path: /mnt/alhajda-work/out/release/*.iso*
+          compression-level: 0
+          retention-days: 14
+      - name: Upload Hyper-V VHDX
+        uses: actions/upload-artifact@v4
+        with:
+          name: alhajda-${{ inputs.version }}-hyperv-vhdx
+          path: /mnt/alhajda-work/out/release/*.vhdx.zip*
+          compression-level: 0
+          retention-days: 14
+      - name: Upload VirtualBox VMDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: alhajda-${{ inputs.version }}-virtualbox-vmdk
+          path: /mnt/alhajda-work/out/release/*.vmdk*
+          compression-level: 0
+          retention-days: 14
+      - name: Upload qcow2 + checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: alhajda-${{ inputs.version }}-qcow2
+          path: |
+            /mnt/alhajda-work/out/release/*.qcow2*
+            /mnt/alhajda-work/out/release/SHA256SUMS
+          compression-level: 0
+          retention-days: 14
+
+      - name: Publish GitHub pre-release
+        if: ${{ inputs.publish }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: os-v${{ inputs.version }}
+          name: "الهجدة (Alhajda OS) ${{ inputs.version }}"
+          prerelease: true
+          target_commitish: ${{ github.sha }}
+          body: |
+            «الهجدة» ${{ inputs.version }} — مبني على Ubuntu 24.04 LTS.
+            - Hyper-V / VirtualBox بدون فلاشة: شغّل `os/windows/install-alhajda-vm.ps1` في PowerShell كمسؤول.
+            - ISO حي (Live) — ملفات `.partNN` تُدمج تلقائياً بالسكربتات (أو `copy /b` يدوياً).
+            - المستخدم الافتراضي في القرص الافتراضي: `alhajda` / كلمة المرور `alhajda` (غيّرها).
+            See os/README.md. SHA256SUMS lists the hash of every *whole* file.
+          files: /mnt/alhajda-work/out/release/*
+          fail_on_unmatched_files: true

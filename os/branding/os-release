@@ -1,0 +1,14 @@
+PRETTY_NAME="الهجدة @VERSION@ (Alhajda, Ubuntu 24.04 LTS)"
+NAME="الهجدة"
+VERSION_ID="24.04"
+VERSION="@VERSION@ (Noble Numbat base)"
+VERSION_CODENAME=noble
+ID=alhajda
+ID_LIKE="ubuntu debian"
+HOME_URL="https://alhajda.com/"
+SUPPORT_URL="https://github.com/elyasalothman/kamputer-alhajda"
+BUG_REPORT_URL="https://github.com/elyasalothman/kamputer-alhajda/issues"
+PRIVACY_POLICY_URL="https://alhajda.com/"
+UBUNTU_CODENAME=noble
+LOGO=alhajda
+ALHAJDA_VERSION="@VERSION@"

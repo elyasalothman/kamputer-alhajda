@@ -1,0 +1,12 @@
+#!/bin/bash
+# Launch Bottles; if it is not installed yet, install it first (asks for the password).
+if flatpak info com.usebottles.bottles >/dev/null 2>&1; then
+  exec flatpak run com.usebottles.bottles "$@"
+fi
+exec xfce4-terminal --title="تثبيت Bottles" -x bash -c '
+  echo "جارٍ تثبيت Bottles لتشغيل برامج ويندوز… (يحتاج اتصال إنترنت)";
+  echo "Installing Bottles from Flathub…";
+  pkexec /usr/local/sbin/alhajda-install-bottles || sudo /usr/local/sbin/alhajda-install-bottles;
+  if flatpak info com.usebottles.bottles >/dev/null 2>&1; then
+    echo "تم ✔"; sleep 2; flatpak run com.usebottles.bottles & disown; sleep 1;
+  else echo "تعذّر التثبيت الآن. جرّب لاحقاً. / Install failed, try again later."; read -r -p "Enter…"; fi'

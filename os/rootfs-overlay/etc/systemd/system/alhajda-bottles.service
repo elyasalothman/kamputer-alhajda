@@ -1,0 +1,16 @@
+[Unit]
+Description=Alhajda: install Bottles (Windows apps) from Flathub once online
+ConditionKernelCommandLine=!boot=casper
+ConditionKernelCommandLine=!alhajda.nobottles
+ConditionPathExists=!/var/lib/alhajda/bottles-installed
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+# simple (not oneshot) so boot never waits for this download
+Type=simple
+ExecStart=/usr/local/sbin/alhajda-install-bottles
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

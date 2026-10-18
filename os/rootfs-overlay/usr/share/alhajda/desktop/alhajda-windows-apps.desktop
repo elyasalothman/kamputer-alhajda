@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Windows apps (Bottles)
+Name[ar]=برامج ويندوز (Bottles)
+Comment=Run Windows programs with Wine/Bottles
+Exec=/usr/local/bin/alhajda-bottles
+Icon=wine
+Terminal=false
+Categories=System;Emulator;
+StartupNotify=true
