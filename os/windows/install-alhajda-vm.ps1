@@ -13,10 +13,13 @@
   Nothing on your physical disk partitions is changed.
 
 .EXAMPLE
-  # PowerShell as Administrator:
-  Set-ExecutionPolicy -Scope Process Bypass -Force
-  iwr https://raw.githubusercontent.com/elyasalothman/kamputer-alhajda/main/os/windows/install-alhajda-vm.ps1 -OutFile $env:TEMP\install-alhajda-vm.ps1
-  & $env:TEMP\install-alhajda-vm.ps1
+  # أسهل طريقة — سطر واحد في PowerShell (يطلب صلاحيات المسؤول تلقائياً):
+  irm https://alhajda.com/os.ps1 | iex
+  # أو شغّل الملف AlhajdaSetup.cmd من صفحة https://alhajda.com/os
+
+.EXAMPLE
+  .\install-alhajda-vm.ps1 -Update    # يعرض آخر إصدار ويحدّث ملفات المثبّت فقط — لا يلمس الجهاز الافتراضي ولا بياناتك
+  .\install-alhajda-vm.ps1 -DryRun    # فحص فقط: يكتشف Hyper-V/VirtualBox والإصدار والملفات دون أي تغيير
 
 .EXAMPLE
   .\install-alhajda-vm.ps1 -MemoryGB 6 -CPUCount 4 -DiskGB 60
@@ -34,13 +37,23 @@ param(
   [ValidateSet('Auto', 'HyperV', 'VirtualBox')][string]$Hypervisor = 'Auto',
   [string]$LocalImage = '',
   [switch]$NoStart,
-  [switch]$Force
+  [switch]$Force,
+  [switch]$Update,
+  [switch]$DryRun,
+  [switch]$Pause
 )
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
 try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
+
+trap {
+  Write-Host ''
+  Write-Host ("✖ خطأ / Error: " + $_.Exception.Message) -ForegroundColor Red
+  if ($Pause) { Read-Host 'اضغط Enter للإغلاق / Press Enter to close' | Out-Null }
+  exit 1
+}
 
 function Say([string]$Ar, [string]$En = '') {
   Write-Host ("» " + $Ar) -ForegroundColor Cyan
@@ -70,9 +83,13 @@ function Get-ForwardArgs {
   return $list
 }
 $script:BoundParams = $PSBoundParameters
+function Exit-Script([int]$Code = 0) {
+  if ($Pause) { Read-Host 'اضغط Enter للإغلاق / Press Enter to close' | Out-Null }
+  exit $Code
+}
 
 # ---------------------------------------------------------------- elevation
-if (-not (Test-Admin)) {
+if (-not (Test-Admin) -and -not $DryRun) {
   if (-not $PSCommandPath) {
     throw 'شغّل PowerShell كمسؤول (Run as Administrator) ثم أعد تشغيل السكربت. / Please run from an elevated PowerShell.'
   }
@@ -85,6 +102,26 @@ if (-not (Test-Admin)) {
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 $DownloadDir = Join-Path $InstallDir 'download'
 New-Item -ItemType Directory -Force -Path $DownloadDir | Out-Null
+$ghHeaders = @{ 'User-Agent' = 'alhajda-vm-installer'; 'Accept' = 'application/vnd.github+json' }
+$InstalledFile = Join-Path $InstallDir 'installed-release.txt'
+
+# ---------------------------------------------------------------- -Update
+# التحديثات الفعلية للنظام تتم من داخل «الهجدة» نفسه (أداة «تحديث الهجدة» + تحديثات أوبونتو الأمنية التلقائية).
+# هذا الوضع لا يلمس الجهاز الافتراضي ولا قرصه ولا بياناتك: يعرض الإصدار ويحدّث ملفات المثبّت في $InstallDir فقط.
+if ($Update) {
+  $rels = Invoke-RestMethod -Headers $ghHeaders -Uri "https://api.github.com/repos/$Repo/releases?per_page=50"
+  $latest = $rels | Where-Object { $_.tag_name -like 'os-v*' -and -not $_.draft } | Select-Object -First 1
+  $installed = if (Test-Path $InstalledFile) { (Get-Content $InstalledFile -TotalCount 1).Trim() } else { '' }
+  if (-not $installed) { $installed = '(غير معروف / unknown)' }
+  Say ("الإصدار المثبّت بهذا السكربت: {0} — أحدث إصدار: {1}" -f $installed, $latest.tag_name) $latest.html_url
+  foreach ($n in @('install-alhajda-vm.ps1', 'AlhajdaSetup.cmd')) {
+    $a = $latest.assets | Where-Object { $_.name -eq $n } | Select-Object -First 1
+    if ($a) { Invoke-WebRequest -UseBasicParsing -Uri $a.browser_download_url -OutFile (Join-Path $InstallDir $n); Say "تم تحديث $n في $InstallDir" 'installer file refreshed' }
+  }
+  Say 'لتحديث النظام نفسه: داخل «الهجدة» افتح «تحديث الهجدة» من سطح المكتب أو القائمة (أو الأمر alhajda-update). يعمل تلقائياً كل أسبوع أيضاً.' 'Inside Alhajda run "alhajda-update" (also runs weekly). Your VM and files are untouched.'
+  Warn 'لتركيب صورة جديدة كلياً بدلاً من التحديث: أعد التشغيل بـ -Force (يحذف الجهاز الحالي وبياناته!).' 'Fresh image instead: re-run with -Force (DELETES the current VM and its data).'
+  Exit-Script 0
+}
 
 # ---------------------------------------------------------------- hypervisor detection
 function Get-HyperVState {
@@ -124,6 +161,21 @@ if ($choice -eq 'Auto') {
 }
 Say ("حالة Hyper-V: {0} — سيتم استخدام: {1}" -f $hv, $choice) ("Hyper-V state: $hv; using: $choice")
 
+# ---------------------------------------------------------------- -DryRun (no changes at all)
+if ($DryRun) {
+  $sfx = if ($choice -eq 'HyperV') { '-hyperv.vhdx.zip' } else { '-virtualbox.vmdk' }
+  if ($Tag) { $r = Invoke-RestMethod -Headers $ghHeaders -Uri "https://api.github.com/repos/$Repo/releases/tags/$Tag" }
+  else { $r = Invoke-RestMethod -Headers $ghHeaders -Uri "https://api.github.com/repos/$Repo/releases?per_page=50" | Where-Object { $_.tag_name -like 'os-v*' -and -not $_.draft } | Select-Object -First 1 }
+  if (-not $r) { throw 'no os-v* release found' }
+  $files = @($r.assets | Where-Object { $_.name -like "*$sfx" -or $_.name -like "*$sfx.part*" })
+  $sums = $r.assets | Where-Object { $_.name -eq 'SHA256SUMS' }
+  Write-Host ("ALHAJDA_DRYRUN release={0} hypervisor={1} hv_state={2} image_files={3} sha256sums={4} admin={5} ps={6}" -f `
+      $r.tag_name, $choice, $hv, $files.Count, [bool]$sums, (Test-Admin), $PSVersionTable.PSVersion)
+  $files | ForEach-Object { Write-Host ("  {0}  {1:N2} GB" -f $_.name, ($_.size / 1GB)) }
+  if ($files.Count -eq 0 -or -not $sums) { throw 'release is missing image files or SHA256SUMS' }
+  Exit-Script 0
+}
+
 if ($choice -eq 'HyperV') {
   if ($hv -eq 'Unavailable') { throw 'Hyper-V غير متوفر في هذه النسخة من ويندوز (Home). استخدم -Hypervisor VirtualBox. / Hyper-V is not available on this edition.' }
   if ($hv -eq 'Disabled') {
@@ -156,7 +208,6 @@ else {
 }
 
 # ---------------------------------------------------------------- download helpers
-$ghHeaders = @{ 'User-Agent' = 'alhajda-vm-installer'; 'Accept' = 'application/vnd.github+json' }
 
 function Get-AlhajdaRelease {
   if ($Tag) { return Invoke-RestMethod -Headers $ghHeaders -Uri "https://api.github.com/repos/$Repo/releases/tags/$Tag" }
@@ -252,6 +303,7 @@ else {
   $rel = Get-AlhajdaRelease
   Say ("الإصدار: {0}" -f $rel.tag_name) $rel.html_url
   $img = Get-ReleaseFile $rel $suffix
+  Set-Content -Path $InstalledFile -Value $rel.tag_name -Encoding ASCII
 }
 
 # ---------------------------------------------------------------- Hyper-V
@@ -333,3 +385,5 @@ Write-Host ''
 Say 'تم ✔ — «الهجدة» يعمل الآن في نافذة الجهاز الافتراضي.' 'Done. Alhajda is starting in the VM window.'
 Say 'المستخدم: alhajda — كلمة المرور: alhajda (غيّرها من الإعدادات أو بالأمر passwd)' 'user: alhajda / password: alhajda — change it.'
 Say 'تبديل لوحة المفاتيح عربي/إنجليزي: Alt+Shift' 'Keyboard layout toggle: Alt+Shift'
+Say 'التحديث لاحقاً: داخل «الهجدة» افتح «تحديث الهجدة» (ويعمل تلقائياً أسبوعياً). تحديثات أوبونتو الأمنية تلقائية.' 'Updates: run "Alhajda Update" inside the VM (also automatic weekly).'
+Exit-Script 0

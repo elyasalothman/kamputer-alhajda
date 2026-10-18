@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly Alhajda update check
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=3h
+
+[Install]
+WantedBy=timers.target

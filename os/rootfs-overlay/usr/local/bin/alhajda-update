@@ -1,0 +1,247 @@
+#!/bin/bash
+# alhajda-update — «تحديث الهجدة»
+#
+# يتحقق من وجود إصدار os-v* أحدث في GitHub Releases، ويطبّق حزمة تحديث الهجدة الصغيرة
+# (alhajda-update-<v>.tar.gz: إعدادات، اختصارات، هوية) بعد التحقق من SHA256.
+# لا يغيّر الأقسام أبداً، ولا يلمس ملفات المستخدمين في /home (الاختصارات تُحدَّث عند تسجيل الدخول).
+# Checks GitHub Releases for a newer os-v* tag and applies Alhajda's own overlay bundle
+# (configs, shortcuts, branding). Never repartitions, never touches user data.
+#
+# Usage:
+#   alhajda-update                 تطبيق تحديث الهجدة إن وُجد (يطلب sudo)
+#   alhajda-update --check         فحص فقط (بدون صلاحيات)
+#   alhajda-update --interactive   ما يفتحه اختصار «تحديث الهجدة»: الهجدة + تحديثات أوبونتو
+#   alhajda-update --system        بعد تحديث الهجدة: apt full-upgrade لبرامج النظام
+#   alhajda-update --system-only   تحديث برامج أوبونتو فقط
+#   alhajda-update --auto          للمؤقّت الأسبوعي: صامت، مع إشعار سطح مكتب بالعربية
+#   alhajda-update --bundle FILE   تطبيق حزمة محلية (للاختبار / بدون إنترنت)
+#   alhajda-update --download-only DIR   تنزيل الحزمة والتحقق منها فقط
+# Options: --api-url URL  --current VERSION  --force (re-apply even if not newer)
+#
+# Machine-readable status lines start with "ALHAJDA_UPDATE:".
+
+main() {
+  set -uo pipefail
+  REPO="${ALHAJDA_REPO:-elyasalothman/kamputer-alhajda}"
+  API="${ALHAJDA_API_URL:-https://api.github.com/repos/${REPO}/releases?per_page=30}"
+  ROOT="${ALHAJDA_ROOT:-}"            # testing only: apply into another root directory
+  STATE="${ROOT}/var/lib/alhajda/update"
+  VERFILE="${ROOT}/etc/alhajda/version"
+  MODE=apply INTERACTIVE=0 SYSTEM=0 AUTO=0 FORCE=0 CURRENT="" BUNDLE="" DLDIR=""
+  ORIG_ARGS=("$@")
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --check) MODE=check;;
+      --apply) MODE=apply;;
+      --interactive) INTERACTIVE=1;;
+      --system) SYSTEM=1;;
+      --system-only) MODE=sysonly;;
+      --auto) AUTO=1;;
+      --force) FORCE=1;;
+      --api-url) API="$2"; shift;;
+      --current) CURRENT="$2"; shift;;
+      --bundle) BUNDLE="$2"; shift;;
+      --download-only) MODE=download; DLDIR="$2"; shift;;
+      -h|--help) sed -n '2,23p' "$0"; return 0;;
+      *) echo "خيار غير معروف / unknown option: $1" >&2; return 2;;
+    esac
+    shift
+  done
+
+  [ "$INTERACTIVE" = 1 ] && { interactive; return $?; }
+
+  if { [ "$MODE" = apply ] || [ "$MODE" = sysonly ]; } && [ "$(id -u)" -ne 0 ] && [ -z "$ROOT" ]; then
+    say "يحتاج التحديث صلاحيات المسؤول (sudo)…" "needs root"
+    exec sudo -- "$0" "${ORIG_ARGS[@]}"
+  fi
+
+  if [ "$MODE" = apply ]; then
+    mkdir -p "$STATE" "${ROOT}/etc/alhajda"
+    exec 9>"${ROOT:-/run}/alhajda-update.lock"
+    flock -n 9 || { say "يوجد تحديث آخر قيد التشغيل." "another update is running"; return 1; }
+  fi
+
+  [ "$MODE" = sysonly ] && { system_upgrade; return 0; }
+  local cur; cur=$(current_version)
+  if [ -n "$BUNDLE" ]; then
+    apply_bundle "$BUNDLE" "$cur" || return 1
+    [ "$SYSTEM" = 1 ] && system_upgrade
+    return 0
+  fi
+
+  local info
+  if ! info=$(latest_release); then
+    status "error reason=api"
+    say "تعذّر الاتصال بخادم التحديثات (GitHub). تحقّق من الإنترنت." "could not reach the update server"
+    [ "$AUTO" = 1 ] && return 0 || return 1
+  fi
+  local tag ver url name sums
+  read -r tag ver url name sums <<<"$info"
+  if [ -z "${tag:-}" ]; then
+    status "none current=${cur}"
+    say "لا توجد حزمة تحديث منشورة بعد. نسختك: ${cur}" "no update bundle published"
+    [ "$SYSTEM" = 1 ] && [ "$MODE" = apply ] && system_upgrade
+    return 0
+  fi
+
+  if ! newer "$ver" "$cur" && [ "$FORCE" != 1 ]; then
+    status "uptodate current=${cur} latest=${ver}"
+    say "«الهجدة» محدَّث — الإصدار ${cur} هو الأحدث." "up to date (${cur})"
+    [ "$SYSTEM" = 1 ] && [ "$MODE" = apply ] && system_upgrade
+    return 0
+  fi
+
+  status "available current=${cur} latest=${ver} tag=${tag} bundle=${name}"
+  say "يتوفر تحديث: ${cur} ← ${ver}" "update available: ${cur} -> ${ver}"
+  [ "$MODE" = check ] && return 0
+
+  local dir="${DLDIR:-$STATE/download}"
+  mkdir -p "$dir"
+  local file="$dir/$name"
+  download "$url" "$file" || { status "error reason=download"; return 1; }
+  verify "$file" "$name" "$sums" || { status "error reason=checksum"; rm -f "$file"; return 1; }
+  if [ "$MODE" = download ]; then status "downloaded file=${file}"; return 0; fi
+
+  apply_bundle "$file" "$cur" || return 1
+  rm -f "$file"
+  [ "$SYSTEM" = 1 ] && system_upgrade
+  return 0
+}
+
+say() {   # say <arabic> [english]
+  [ "${AUTO:-0}" = 1 ] && { logger -t alhajda-update -- "$1 ${2:-}" 2>/dev/null || true; return 0; }
+  printf '» %s\n' "$1"
+  [ -n "${2:-}" ] && printf '  %s\n' "$2"
+  return 0
+}
+status() { echo "ALHAJDA_UPDATE: $*"; }
+
+current_version() {
+  if [ -n "$CURRENT" ]; then echo "$CURRENT"; return; fi
+  if [ -s "$VERFILE" ]; then head -n1 "$VERFILE"; return; fi
+  ( . /etc/os-release 2>/dev/null; echo "${ALHAJDA_VERSION:-0}" )
+}
+
+# newer A B  -> true when version A > version B
+newer() {
+  [ "$1" = "$2" ] && return 1
+  [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
+}
+
+# prints: tag version bundle_url bundle_name sha256sums_url   (empty line if none)
+latest_release() {
+  local json
+  json=$(curl -fsSL --connect-timeout 15 --retry 5 --retry-delay 4 --retry-connrefused \
+         -H 'Accept: application/vnd.github+json' -H 'User-Agent: alhajda-update' "$API") || return 1
+  printf '%s' "$json" | python3 -c '
+import json, re, sys
+def key(v):
+    return [int(p) if p.isdigit() else p for p in re.split(r"[.\-+]", v)]
+best = None
+for r in json.load(sys.stdin):
+    tag = r.get("tag_name", "")
+    if r.get("draft") or not tag.startswith("os-v"):
+        continue
+    ver = tag[4:]
+    bundle = sums = None
+    for a in r.get("assets", []):
+        n = a.get("name", "")
+        if re.fullmatch(r"alhajda-update-.+\.tar\.gz", n): bundle = a
+        if n == "SHA256SUMS": sums = a["browser_download_url"]
+    if not bundle:
+        continue
+    if best is None or key(ver) > key(best[1]):
+        best = (tag, ver, bundle["browser_download_url"], bundle["name"], sums or "-")
+print(" ".join(best) if best else "")
+'
+}
+
+download() {
+  curl -fSL --connect-timeout 15 --retry 5 --retry-delay 4 --retry-connrefused -s -o "$2" "$1"
+}
+
+verify() {   # verify <file> <name> <sums_url>
+  [ "$3" = "-" ] && { say "لا يوجد ملف SHA256SUMS في الإصدار — رفض التحديث." "no SHA256SUMS, refusing"; return 1; }
+  local sums expected actual
+  sums=$(curl -fsSL --connect-timeout 15 --retry 5 --retry-delay 4 --retry-connrefused "$3") || return 1
+  expected=$(printf '%s\n' "$sums" | awk -v n="$2" '$2==n || $2=="*"n {print $1; exit}')
+  actual=$(sha256sum "$1" | cut -d' ' -f1)
+  [ -n "$expected" ] && [ "$expected" = "$actual" ] || { say "بصمة SHA256 غير مطابقة!" "SHA256 mismatch"; return 1; }
+  status "verified sha256=${actual}"
+}
+
+apply_bundle() {   # apply_bundle <tarball> <current_version>
+  local tb="$1" cur="$2" tmp ver
+  # refuse absolute paths / .. / anything outside etc/ and usr/
+  if tar -tzf "$tb" | grep -qE '(^/|(^|/)\.\.(/|$))'; then say "حزمة غير صالحة." "unsafe paths in bundle"; status "error reason=unsafe"; return 1; fi
+  if tar -tzf "$tb" | sed 's#^\./##' | grep -E '^overlay/.' | grep -vqE '^overlay/(etc|usr)(/|$)'; then
+    say "الحزمة تحاول الكتابة خارج /etc و/usr — رفض." "bundle writes outside /etc,/usr"; status "error reason=unsafe"; return 1
+  fi
+  tmp=$(mktemp -d /tmp/alhajda-update.XXXXXX)
+  tar -xzf "$tb" -C "$tmp" --no-same-owner || { rm -rf "$tmp"; status "error reason=extract"; return 1; }
+  [ -s "$tmp/VERSION" ] && [ -d "$tmp/overlay" ] || { rm -rf "$tmp"; say "حزمة ناقصة." "bundle missing VERSION/overlay"; status "error reason=format"; return 1; }
+  ver=$(head -n1 "$tmp/VERSION")
+  say "تطبيق تحديث الهجدة ${ver}…" "applying overlay ${ver}"
+  local backup
+  backup="$STATE/backup-${cur}-$(date +%Y%m%d%H%M%S)"
+  # rsync writes each file to a temp name then renames it, so this running script is safe.
+  rsync -rlp --omit-dir-times --backup --backup-dir="$backup" "$tmp/overlay/" "${ROOT:-/}" \
+    || { rm -rf "$tmp"; status "error reason=rsync"; return 1; }
+  if [ -f "$tmp/post-install.sh" ]; then
+    ALHAJDA_ROOT="$ROOT" BUNDLE_DIR="$tmp" ALHAJDA_NEW_VERSION="$ver" ALHAJDA_OLD_VERSION="$cur" bash "$tmp/post-install.sh" \
+      || say "تحذير: خطوة ما بعد التثبيت لم تكتمل بالكامل." "post-install reported a problem"
+  fi
+  mkdir -p "$(dirname "$VERFILE")"
+  echo "$ver" > "$VERFILE"
+  echo "$(date -Is) ${cur} -> ${ver}" >> "$STATE/history.log"
+  rm -rf "$tmp"
+  status "applied from=${cur} to=${ver}"
+  say "تم ✔ تحديث «الهجدة» إلى ${ver}. ملفاتك كما هي." "updated to ${ver}; your files are untouched"
+  [ -z "$ROOT" ] && notify_users "تم تحديث «الهجدة» إلى الإصدار ${ver} ✔" "الاختصارات والإعدادات الجديدة جاهزة. ملفاتك لم تتغيّر."
+  return 0
+}
+
+system_upgrade() {
+  say "تحديث برامج النظام (أوبونتو)… قد يستغرق دقائق" "apt full-upgrade"
+  export DEBIAN_FRONTEND=noninteractive
+  if apt-get update && apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold full-upgrade; then
+    status "system upgraded"; say "تم تحديث برامج النظام ✔" "system packages updated"
+  else
+    status "error reason=apt"; say "تعذّر تحديث برامج النظام." "apt failed"
+  fi
+}
+
+notify_users() {   # desktop notification (Arabic) to every logged-in graphical user
+  command -v notify-send >/dev/null || return 0
+  local uid user
+  while read -r uid user; do
+    [ -n "$uid" ] && [ "$uid" -ge 1000 ] 2>/dev/null || continue
+    [ -S "/run/user/$uid/bus" ] || continue
+    timeout 10 runuser -u "$user" -- env DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+      notify-send -a "الهجدة" -i /usr/share/alhajda/icons/alhajda.png "$1" "$2" 2>/dev/null || true
+  done < <(loginctl list-users --no-legend 2>/dev/null | awk '{print $1, $2}')
+}
+
+interactive() {
+  echo "════════  تحديث الهجدة  ════════"
+  echo "الإصدار الحالي: $(current_version)"
+  echo
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "قد يُطلب منك إدخال كلمة مرورك (الافتراضية: alhajda)."
+    sudo -- "$0" --apply
+  else
+    "$0" --apply
+  fi
+  echo
+  local a=""
+  read -r -p "هل تريد أيضاً تحديث برامج النظام (أوبونتو) الآن؟ [ن/ل] (y/N): " a || true
+  case "$a" in
+    ن|نعم|y|Y|yes) sudo -- "$0" --system-only;;
+  esac
+  echo
+  read -r -p "اضغط Enter للإغلاق…" a || true
+}
+
+main "$@"
+exit $?

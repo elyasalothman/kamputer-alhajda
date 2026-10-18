@@ -1,0 +1,5 @@
+// «الهجدة»: تحديثات أوبونتو الأمنية تُثبَّت تلقائياً كل يوم (unattended-upgrades).
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Download-Upgradeable-Packages "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";

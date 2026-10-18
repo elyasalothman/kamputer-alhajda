@@ -3,7 +3,7 @@
 set -euxo pipefail
 export DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8 LANG=C.UTF-8
 MIRROR="${UBUNTU_MIRROR:-http://archive.ubuntu.com/ubuntu}"
-VER="${ALHAJDA_VERSION:-1.0.0}"
+VER="${ALHAJDA_VERSION:-1.1.0}"
 APT_OPTS=(-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 
 # never start services inside the build chroot
@@ -60,6 +60,7 @@ grub-pc grub-pc/install_devices multiselect
 grub-efi-amd64 grub2/update_nvram boolean false
 shim-signed shim/enable_secureboot boolean false
 lightdm shared/default-x-display-manager select lightdm
+unattended-upgrades unattended-upgrades/enable_auto_updates boolean true
 EOF
 
 # ---------- Mozilla APT repo (real .deb Firefox, no snap) ----------
@@ -87,7 +88,8 @@ apt-get "${APT_OPTS[@]}" install \
   keyboard-configuration console-setup \
   language-pack-ar language-pack-en language-pack-gnome-ar language-pack-gnome-en \
   fonts-noto-core fonts-noto-ui-core fonts-noto-mono fonts-noto-color-emoji fonts-dejavu-core \
-  spice-vdagent
+  spice-vdagent \
+  unattended-upgrades python3 libnotify-bin
 
 # ---------- light desktop: XFCE (Xubuntu core) ----------
 apt-get "${APT_OPTS[@]}" install \
@@ -163,8 +165,17 @@ cp "$B/firefox-policies.json" /usr/lib/firefox/distribution/policies.json
 # initramfs: ntfs3 so casper can boot an ISO stored on a Windows (NTFS) partition
 echo ntfs3 >> /etc/initramfs-tools/modules
 
+# Alhajda version (read by alhajda-update) + desktop shortcut version (read by alhajda-firstlogin)
+install -d /etc/alhajda /var/lib/alhajda/update
+echo "${VER}" > /etc/alhajda/version
+echo "${VER}" > /usr/share/alhajda/desktop-version
+# keep our unattended-upgrades schedule even if the package postinst rewrote it
+cp /usr/share/alhajda/apt/20auto-upgrades /etc/apt/apt.conf.d/20auto-upgrades
+
 # services
 systemctl enable alhajda-bootcheck.service alhajda-growroot.service alhajda-bottles.service
+systemctl enable alhajda-update.timer
+systemctl enable unattended-upgrades.service apt-daily.timer apt-daily-upgrade.timer || true
 systemctl enable NetworkManager.service systemd-resolved.service || true
 systemctl set-default graphical.target
 

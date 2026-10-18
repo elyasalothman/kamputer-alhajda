@@ -1,0 +1,14 @@
+[Unit]
+Description=Alhajda update check (configs, shortcuts, branding from GitHub Releases)
+Documentation=https://github.com/elyasalothman/kamputer-alhajda/tree/main/os
+Wants=network-online.target
+After=network-online.target
+# the live session forgets everything at shutdown: nothing to update there
+ConditionKernelCommandLine=!boot=casper
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/alhajda-update --auto
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=30min

@@ -2,7 +2,7 @@
 # إعدادات بناء نظام «الهجدة» — Alhajda OS build configuration.
 # Sourced by every build script. Override any value through the environment.
 
-: "${ALHAJDA_VERSION:=1.0.0}"
+: "${ALHAJDA_VERSION:=1.1.0}"
 : "${UBUNTU_SUITE:=noble}"                 # Ubuntu 24.04 LTS
 : "${UBUNTU_MIRROR:=http://archive.ubuntu.com/ubuntu}"
 : "${WORK:=/mnt/alhajda-work}"              # big scratch dir (GitHub runners: /mnt)

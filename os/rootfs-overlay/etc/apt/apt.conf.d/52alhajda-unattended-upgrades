@@ -1,0 +1,10 @@
+// «الهجدة»: security updates only (Ubuntu noble-security + ESM). Lists are appended to
+// the defaults in 50unattended-upgrades. Never reboots on its own.
+Unattended-Upgrade::Allowed-Origins {
+        "Ubuntu:noble-security";
+        "UbuntuESMApps:noble-apps-security";
+        "UbuntuESM:noble-infra-security";
+};
+Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "false";

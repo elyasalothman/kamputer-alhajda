@@ -6,7 +6,7 @@ Wants=display-manager.service
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/alhajda-bootcheck
-TimeoutStartSec=150
+TimeoutStartSec=900
 RemainAfterExit=yes
 
 [Install]

@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "OS version (e.g. 1.0.0)"
-        default: "1.0.0"
+        description: "OS version (e.g. 1.1.0)"
+        default: "1.1.0"
         required: true
       publish:
         description: "Publish a GitHub (pre)release os-v<version> with the images"
@@ -33,10 +33,38 @@ jobs:
       - name: bash syntax + shellcheck
         run: |
           set -e
-          for f in os/build/*.sh os/rootfs-overlay/usr/local/sbin/* os/rootfs-overlay/usr/local/bin/*; do
+          for f in os/build/*.sh os/update/*.sh os/rootfs-overlay/usr/local/sbin/* os/rootfs-overlay/usr/local/bin/*; do
             bash -n "$f"
           done
-          shellcheck -S error os/build/*.sh os/rootfs-overlay/usr/local/sbin/* os/rootfs-overlay/usr/local/bin/*
+          shellcheck -S error os/build/*.sh os/update/*.sh os/rootfs-overlay/usr/local/sbin/* os/rootfs-overlay/usr/local/bin/*
+      - name: alhajda-update unit test (fake releases API, temp root)
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y -q rsync >/dev/null
+          T=$(mktemp -d); mkdir -p "$T/root/etc/alhajda" "$T/root/home/u"
+          echo 1.0.0 > "$T/root/etc/alhajda/version"; echo mine > "$T/root/home/u/doc.txt"
+          WORK="$T/work" bash os/update/make-selftest-server.sh "$T/srv" 99.0.0 8123 127.0.0.1
+          (cd "$T/srv" && python3 -m http.server 8123 --bind 127.0.0.1 >/dev/null 2>&1 &); sleep 2
+          U=os/rootfs-overlay/usr/local/bin/alhajda-update; API=http://127.0.0.1:8123/releases.json
+          ALHAJDA_ROOT="$T/root" $U --check --api-url "$API" | tee "$T/check.txt"
+          grep -q 'ALHAJDA_UPDATE: available current=1.0.0 latest=99.0.0' "$T/check.txt"
+          ALHAJDA_ROOT="$T/root" $U --api-url "$API"
+          test "$(cat "$T/root/etc/alhajda/version")" = 99.0.0
+          grep -q 'ALHAJDA_VERSION="99.0.0"' "$T/root/usr/lib/os-release"
+          test -f "$T/root/usr/share/alhajda/selftest-applied"
+          test "$(cat "$T/root/home/u/doc.txt")" = mine
+          ALHAJDA_ROOT="$T/root" $U --api-url "$API" | grep -q uptodate
+          # tampered checksum must be refused
+          echo 1.0.0 > "$T/root/etc/alhajda/version"
+          echo "0000  alhajda-update-99.0.0.tar.gz" > "$T/srv/SHA256SUMS"
+          if ALHAJDA_ROOT="$T/root" $U --api-url "$API"; then echo "::error::tampered bundle accepted"; exit 1; fi
+          test "$(cat "$T/root/etc/alhajda/version")" = 1.0.0
+          # bundle writing outside /etc,/usr must be refused
+          mkdir -p "$T/evil/overlay/home/u"; echo x > "$T/evil/overlay/home/u/doc.txt"; echo 5 > "$T/evil/VERSION"
+          tar -czf "$T/evil.tgz" -C "$T/evil" .
+          if ALHAJDA_ROOT="$T/root" $U --bundle "$T/evil.tgz"; then echo "::error::unsafe bundle accepted"; exit 1; fi
+          test "$(cat "$T/root/home/u/doc.txt")" = mine
+          echo "alhajda-update unit test PASS"
       - name: PowerShell syntax
         shell: pwsh
         run: |
@@ -98,8 +126,13 @@ jobs:
           sudo chown -R "$USER" "$WORK/smoke" "$WORK/out" || true
           cat "$WORK/chroot/etc/os-release" || true
 
-      - name: Smoke test — VM disk, BIOS (raw)
-        run: bash os/build/smoke-test.sh disk-bios bios disk "$WORK/alhajda-${ALHAJDA_VERSION}.raw" raw 900
+      - name: Prepare in-VM update self-test (fake releases API + bundle 99.0.0)
+        run: bash os/update/make-selftest-server.sh "$WORK/selftest-api" 99.0.0 8099
+
+      - name: Smoke test — VM disk, BIOS (raw) + in-VM alhajda-update self-test
+        env:
+          UPDATE_SELFTEST_DIR: /mnt/alhajda-work/selftest-api
+        run: bash os/build/smoke-test.sh disk-bios bios disk "$WORK/alhajda-${ALHAJDA_VERSION}.raw" raw 1200
 
       - name: Smoke test — VHDX, UEFI (Hyper-V Gen2 path)
         run: bash os/build/smoke-test.sh vhdx-uefi uefi disk "$WORK/out/alhajda-${ALHAJDA_VERSION}-hyperv.vhdx" vhdx 900
@@ -119,6 +152,7 @@ jobs:
         run: |
           sudo rm -f "$WORK/alhajda-${ALHAJDA_VERSION}.raw"
           sudo rm -rf "$WORK/chroot"
+          bash os/update/build-update-bundle.sh
           bash os/build/package.sh
           df -h /mnt
 
@@ -143,13 +177,16 @@ jobs:
           path: /mnt/alhajda-work/out/release/*.vmdk*
           compression-level: 0
           retention-days: 14
-      - name: Upload qcow2 + checksums
+      - name: Upload qcow2 + checksums + update bundle + Windows setup
         uses: actions/upload-artifact@v4
         with:
           name: alhajda-${{ inputs.version }}-qcow2
           path: |
             /mnt/alhajda-work/out/release/*.qcow2*
             /mnt/alhajda-work/out/release/SHA256SUMS
+            /mnt/alhajda-work/out/release/*.tar.gz
+            /mnt/alhajda-work/out/release/*.cmd
+            /mnt/alhajda-work/out/release/*.ps1
           compression-level: 0
           retention-days: 14
 
@@ -163,9 +200,26 @@ jobs:
           target_commitish: ${{ github.sha }}
           body: |
             «الهجدة» ${{ inputs.version }} — مبني على Ubuntu 24.04 LTS.
-            - Hyper-V / VirtualBox بدون فلاشة: شغّل `os/windows/install-alhajda-vm.ps1` في PowerShell كمسؤول.
+            **التثبيت بخطوة واحدة:** https://alhajda.com/os — الصق في PowerShell: `irm https://alhajda.com/os.ps1 | iex` أو شغّل `AlhajdaSetup.cmd`.
+            - **التحديث:** داخل النظام «تحديث الهجدة» (تلقائي أسبوعياً، الحزمة `alhajda-update-${{ inputs.version }}.tar.gz`) + تحديثات أوبونتو الأمنية التلقائية.
+            - Hyper-V / VirtualBox بدون فلاشة: `install-alhajda-vm.ps1` (يُشغَّل تلقائياً من الأمر أعلاه).
             - ISO حي (Live) — ملفات `.partNN` تُدمج تلقائياً بالسكربتات (أو `copy /b` يدوياً).
             - المستخدم الافتراضي في القرص الافتراضي: `alhajda` / كلمة المرور `alhajda` (غيّرها).
             See os/README.md. SHA256SUMS lists the hash of every *whole* file.
           files: /mnt/alhajda-work/out/release/*
           fail_on_unmatched_files: true
+
+      - name: Verify published release with alhajda-update (as an older install would see it)
+        if: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          U=os/rootfs-overlay/usr/local/bin/alhajda-update
+          for i in 1 2 3 4 5 6; do
+            out=$($U --check --current 1.0.0 || true); echo "$out"
+            echo "$out" | grep -q "latest=${ALHAJDA_VERSION} " && break
+            sleep 20
+          done
+          echo "$out" | grep -q "ALHAJDA_UPDATE: available current=1.0.0 latest=${ALHAJDA_VERSION} tag=os-v${ALHAJDA_VERSION}"
+          $U --download-only "$RUNNER_TEMP/dl" --current 1.0.0 | tee "$RUNNER_TEMP/dl.txt"
+          grep -q 'ALHAJDA_UPDATE: verified sha256=' "$RUNNER_TEMP/dl.txt"
+          tar -tzf "$RUNNER_TEMP/dl/alhajda-update-${ALHAJDA_VERSION}.tar.gz" | grep -q 'overlay/usr/local/bin/alhajda-update'

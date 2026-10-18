@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Alhajda Update
+Name[ar]=تحديث الهجدة
+Comment=Update Alhajda (shortcuts, settings, branding) and Ubuntu packages
+Comment[ar]=تحديث «الهجدة» (الاختصارات والإعدادات والهوية) وبرامج أوبونتو
+Exec=xfce4-terminal --title="تحديث الهجدة" --geometry=96x28 -x /usr/local/bin/alhajda-update --interactive
+Icon=/usr/share/alhajda/icons/alhajda.png
+Terminal=false
+Categories=System;Settings;
+Keywords=update;upgrade;تحديث;
+StartupNotify=true

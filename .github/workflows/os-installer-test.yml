@@ -1,0 +1,67 @@
+name: Test Alhajda OS Windows one-step installer
+
+# Runs the real one-line command (irm https://alhajda.com/os.ps1 | iex) and the double-click
+# AlhajdaSetup.cmd on a Windows runner in -DryRun mode (detects the hypervisor, resolves the newest
+# os-v* release and its image/SHA256SUMS assets, changes nothing), plus the -Update mode.
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Build Alhajda OS"]
+    types: [completed]
+  push:
+    branches: [main]
+    paths:
+      - "os/windows/**"
+      - ".github/workflows/os-installer-test.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: One-line command from alhajda.com (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          $env:ALHAJDA_ARGS = '-DryRun'
+          powershell.exe -NoProfile -Command "irm https://alhajda.com/os.ps1 | iex" *>&1 | Tee-Object -FilePath oneline.txt
+          if (-not (Select-String -Path oneline.txt -Pattern 'ALHAJDA_DRYRUN release=os-v' -Quiet)) { Write-Host '::error::one-line installer dry run failed'; exit 1 }
+
+      - name: One-line command from alhajda.com (PowerShell 7)
+        shell: pwsh
+        run: |
+          $env:ALHAJDA_ARGS = '-DryRun'
+          pwsh -NoProfile -Command "irm https://alhajda.com/os.ps1 | iex" *>&1 | Tee-Object -FilePath oneline7.txt
+          if (-not (Select-String -Path oneline7.txt -Pattern 'ALHAJDA_DRYRUN release=os-v' -Quiet)) { Write-Host '::error::pwsh one-line dry run failed'; exit 1 }
+
+      - name: Hosted os.ps1 matches the repo copy
+        shell: pwsh
+        run: |
+          $live = (Invoke-WebRequest -UseBasicParsing https://alhajda.com/os.ps1).Content
+          if ($live -is [byte[]]) { $live = [Text.Encoding]::UTF8.GetString($live) }
+          $repo = Get-Content -Raw os/windows/os.ps1
+          if (($live -replace "`r", '') -ne ($repo -replace "`r", '')) { Write-Host '::warning::alhajda.com/os.ps1 differs from os/windows/os.ps1 (site not redeployed yet?)' } else { Write-Host 'os.ps1 in sync' }
+
+      - name: Double-click AlhajdaSetup.cmd (repo copy and alhajda.com copy)
+        shell: cmd
+        run: |
+          set ALHAJDA_ARGS=-DryRun
+          set ALHAJDA_NOPAUSE=1
+          call os\windows\AlhajdaSetup.cmd > setup-cmd.txt 2>&1
+          type setup-cmd.txt
+          findstr /C:"ALHAJDA_DRYRUN release=os-v" setup-cmd.txt || exit /b 1
+          curl.exe -fsSL -o "%RUNNER_TEMP%\AlhajdaSetup.cmd" https://alhajda.com/AlhajdaSetup.cmd || exit /b 1
+          call "%RUNNER_TEMP%\AlhajdaSetup.cmd" > setup-site.txt 2>&1
+          type setup-site.txt
+          findstr /C:"ALHAJDA_DRYRUN release=os-v" setup-site.txt || exit /b 1
+
+      - name: -Update mode (never touches a VM)
+        shell: powershell
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File os/windows/install-alhajda-vm.ps1 -Update -InstallDir "$env:RUNNER_TEMP\Alhajda-VM" *>&1 | Tee-Object -FilePath update.txt
+          if (-not (Select-String -Path update.txt -Pattern 'os-v' -Quiet)) { Write-Host '::error::-Update did not report a release'; exit 1 }

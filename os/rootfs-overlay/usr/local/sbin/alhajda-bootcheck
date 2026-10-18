@@ -8,6 +8,45 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 mode=disk; grep -qw 'boot=casper' /proc/cmdline && mode=live
+
+# ---- CI only: in-VM update self-test --------------------------------------------------
+# The QEMU smoke test passes a fake releases API URL through fw_cfg / SMBIOS OEM strings
+# (never present on real machines). We run the real alhajda-update against it and report.
+update_line=""
+api=""
+modprobe qemu_fw_cfg 2>/dev/null || true
+fc=/sys/firmware/qemu_fw_cfg/by_name/opt/alhajda/update-api/raw
+[ -r "$fc" ] && api=$(tr -d '\0\n' < "$fc")
+if [ -z "$api" ]; then
+  for e in /sys/firmware/dmi/entries/11-*/raw; do
+    [ -r "$e" ] || continue
+    api=$(grep -aoE 'alhajda-update-api=[^[:cntrl:]]+' "$e" | head -n1 | cut -d= -f2-)
+    [ -n "$api" ] && break
+  done
+fi
+if [ -n "$api" ] && [ "$mode" = disk ]; then
+  before=$(cat /etc/alhajda/version 2>/dev/null || echo none)
+  probe=/home/alhajda/.alhajda-selftest-userdata
+  [ -d /home/alhajda ] && echo "keep-me $$" > "$probe" && sum_before=$(sha256sum "$probe" | cut -d' ' -f1)
+  for _ in $(seq 1 30); do ip route 2>/dev/null | grep -q '^default' && break; sleep 2; done
+  out=$(timeout 300 /usr/local/bin/alhajda-update --check --api-url "$api" 2>&1; \
+        timeout 300 /usr/local/bin/alhajda-update --auto --api-url "$api" 2>&1)
+  after=$(cat /etc/alhajda/version 2>/dev/null || echo none)
+  sum_after=$( [ -f "$probe" ] && sha256sum "$probe" | cut -d' ' -f1)
+  osver=$(. /etc/os-release; echo "$ALHAJDA_VERSION")
+  uu=$(apt-config dump APT::Periodic::Unattended-Upgrade 2>/dev/null | grep -oE '"[0-9]+"' | tr -d '"')
+  timer=$(systemctl is-enabled alhajda-update.timer 2>/dev/null)
+  uupkg=$(dpkg-query -W -f='${Status}' unattended-upgrades 2>/dev/null | grep -q 'ok installed' && echo yes || echo no)
+  marker=no; [ -f /usr/share/alhajda/selftest-applied ] && marker=yes
+  detail="before=${before} after=${after} os-release=${osver} marker=${marker} userdata=$([ -n "${sum_before:-}" ] && [ "${sum_before:-}" = "${sum_after:-}" ] && echo kept || echo CHANGED) unattended=${uu:-?} uu_pkg=${uupkg} timer=${timer:-?}"
+  if [ "$before" != "$after" ] && [ "$marker" = yes ] && [ "$after" = "$osver" ] && [ "${sum_before:-x}" = "${sum_after:-y}" ] \
+     && [ "${uu:-0}" = 1 ] && [ "$uupkg" = yes ] && [ "$timer" = enabled ]; then
+    update_line="ALHAJDA_UPDATE_OK ${detail}"
+  else
+    update_line="ALHAJDA_UPDATE_FAIL ${detail}"
+  fi
+  update_out=$(printf '%s\n' "$out" | tail -n 25 | sed 's/^/  [alhajda-update] /')
+fi
 name=$(. /etc/os-release; echo "$PRETTY_NAME")
 msg="ALHAJDA_BOOT_OK mode=${mode} display-manager=${state} xkb=$(. /etc/default/keyboard; echo "$XKBLAYOUT") locale=$(. /etc/default/locale; echo "$LANG") os=\"${name}\""
 [ "$state" = "active" ] || msg="ALHAJDA_BOOT_DEGRADED mode=${mode} display-manager=${state}"
@@ -17,6 +56,7 @@ for tty in /dev/ttyS0 /dev/hvc0; do
   [ -c "$tty" ] || continue
   {
     echo "ALHAJDA_FAILED_UNITS: ${failed:-none}"
+    if [ -n "$update_line" ]; then printf '%s\n' "$update_out"; echo "$update_line"; fi
     for u in $failed; do journalctl -b -u "$u" --no-pager -n 15 2>/dev/null | sed "s/^/  [$u] /"; done
     echo "$msg"
   } > "$tty" 2>/dev/null || true

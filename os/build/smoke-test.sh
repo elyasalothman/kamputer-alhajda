@@ -2,6 +2,8 @@
 # Headless QEMU boot smoke test. Boots an image, waits for ALHAJDA_BOOT_OK on the serial port,
 # takes a screenshot of the desktop, then powers off.
 # Usage: smoke-test.sh <name> <bios|uefi> <cdrom|disk> <image> [format] [timeout_s]
+# Env UPDATE_SELFTEST_DIR=<dir from os/update/make-selftest-server.sh>: serve a fake releases API on
+#   the host (port 8099) and require the guest's in-VM alhajda-update self-test to pass.
 set -euo pipefail
 NAME="$1" FW="$2" KIND="$3" IMG="$4" FMT="${5:-raw}" TIMEOUT="${6:-900}"
 LOGDIR="${SMOKE_LOGDIR:-${WORK:-/tmp}/smoke}"
@@ -27,9 +29,19 @@ else
   MEDIA=(-drive "file=${IMG},format=${FMT},if=virtio,snapshot=on")
 fi
 
+EXTRA=()
+HPID=""
+if [ -n "${UPDATE_SELFTEST_DIR:-}" ]; then
+  python3 -m http.server 8099 --bind 127.0.0.1 --directory "${UPDATE_SELFTEST_DIR}" > "${LOGDIR}/${NAME}-http.log" 2>&1 &
+  HPID=$!
+  API="http://10.0.2.2:8099/releases.json"
+  EXTRA=(-fw_cfg "name=opt/alhajda/update-api,string=${API}" -smbios "type=11,value=alhajda-update-api=${API}")
+  echo "[smoke:${NAME}] update self-test enabled (${API})"
+fi
+
 echo "[smoke:${NAME}] accel=${ACCEL[*]} fw=${FW} ${KIND} ${IMG}"
 qemu-system-x86_64 "${ACCEL[@]}" -m 4096 -smp 2 -machine q35 \
-  "${FWARGS[@]}" "${MEDIA[@]}" \
+  "${FWARGS[@]}" "${MEDIA[@]}" "${EXTRA[@]}" \
   -vga std -display none -serial "file:${SER}" \
   -monitor "unix:${MON},server,nowait" \
   -nic user,model=virtio-net-pci &
@@ -52,8 +64,16 @@ if [ -S "${MON}" ]; then
   echo "quit" | socat - "UNIX-CONNECT:${MON}" >/dev/null 2>&1 || true
 fi
 sleep 2; kill "${QPID}" 2>/dev/null || true; wait "${QPID}" 2>/dev/null || true
+[ -n "${HPID}" ] && { kill "${HPID}" 2>/dev/null || true; cat "${LOGDIR}/${NAME}-http.log" || true; }
 
 grep -a 'ALHAJDA_BOOT' "${SER}" || true
+if [ -n "${UPDATE_SELFTEST_DIR:-}" ]; then
+  grep -a -E 'ALHAJDA_UPDATE|\[alhajda-update\]' "${SER}" || true
+  if [ "$ok" = 1 ] && ! grep -aq 'ALHAJDA_UPDATE_OK' "${SER}"; then
+    echo "::error::[smoke:${NAME}] in-VM alhajda-update self-test did not report ALHAJDA_UPDATE_OK"
+    exit 1
+  fi
+fi
 if [ "$ok" != 1 ]; then
   echo "::error::[smoke:${NAME}] no ALHAJDA_BOOT_OK within ${TIMEOUT}s — last serial lines:"
   tail -n 80 "${SER}" | tr -cd '\11\12\15\40-\176\200-\377'

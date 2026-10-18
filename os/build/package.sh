@@ -19,8 +19,13 @@ for f in "${IMAGE_BASENAME}-amd64.iso" "${IMAGE_BASENAME}-virtualbox.vmdk" "${IM
   [ -f "$f" ] && mv "$f" "${REL}/"
 done
 
+# small files: the overlay update bundle (read by alhajda-update inside the OS) and the
+# Windows one-step installers (AlhajdaSetup.cmd / os.ps1 / install-alhajda-vm.ps1)
+for f in "${OUT}"/alhajda-update-*.tar.gz; do [ -f "$f" ] && cp -f "$f" "${REL}/"; done
+cp -f "${OS_DIR}/windows/AlhajdaSetup.cmd" "${OS_DIR}/windows/os.ps1" "${OS_DIR}/windows/install-alhajda-vm.ps1" "${REL}/"
+
 cd "${REL}"
-sha256sum ./*.iso ./*.zip ./*.vmdk ./*.qcow2 2>/dev/null | sed 's#\./##' > SHA256SUMS
+sha256sum ./*.iso ./*.zip ./*.vmdk ./*.qcow2 ./*.tar.gz ./*.cmd ./*.ps1 2>/dev/null | sed 's#\./##' > SHA256SUMS
 cat SHA256SUMS
 # split anything above PART_SIZE into name.part00, name.part01 ... (scripts re-join them)
 for f in *.iso *.zip *.vmdk *.qcow2; do

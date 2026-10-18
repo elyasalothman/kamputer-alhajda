@@ -1,8 +1,16 @@
 #!/bin/bash
-# First desktop login: put Alhajda shortcuts on the (localised) desktop, set wallpaper.
+# Runs at every desktop login (XDG autostart) but only does work when needed:
+#  - first login: put Alhajda shortcuts on the (localised) desktop and set the wallpaper;
+#  - after an Alhajda update (/usr/share/alhajda/desktop-version changed): refresh the
+#    Alhajda shortcuts (alhajda-*.desktop only — nothing else on the desktop is touched).
 marker="${XDG_CONFIG_HOME:-$HOME/.config}/alhajda/firstlogin-done"
-[ -e "$marker" ] && exit 0
-sleep 5
+want=$(cat /usr/share/alhajda/desktop-version 2>/dev/null || echo 0)
+first=1
+if [ -e "$marker" ]; then
+  first=0
+  [ "$(cat "$marker" 2>/dev/null)" = "$want" ] && exit 0
+fi
+[ "$first" = 1 ] && sleep 5
 xdg-user-dirs-update >/dev/null 2>&1 || true
 desk=$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")
 mkdir -p "$desk"
@@ -16,9 +24,9 @@ for f in /usr/share/alhajda/desktop/*.desktop; do
   gio set "$dest" metadata::trusted true 2>/dev/null || true
 done
 WP=/usr/share/backgrounds/alhajda/alhajda-wallpaper.png
-if command -v xfconf-query >/dev/null; then
+if [ "$first" = 1 ] && command -v xfconf-query >/dev/null; then
   for p in $(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep -E 'last-image$|image-path$'); do
     xfconf-query -c xfce4-desktop -p "$p" -s "$WP" 2>/dev/null || true
   done
 fi
-mkdir -p "$(dirname "$marker")" && touch "$marker"
+mkdir -p "$(dirname "$marker")" && echo "$want" > "$marker"
