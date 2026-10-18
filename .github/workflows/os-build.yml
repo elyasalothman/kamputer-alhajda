@@ -222,4 +222,5 @@ jobs:
           echo "$out" | grep -q "ALHAJDA_UPDATE: available current=1.0.0 latest=${ALHAJDA_VERSION} tag=os-v${ALHAJDA_VERSION}"
           $U --download-only "$RUNNER_TEMP/dl" --current 1.0.0 | tee "$RUNNER_TEMP/dl.txt"
           grep -q 'ALHAJDA_UPDATE: verified sha256=' "$RUNNER_TEMP/dl.txt"
-          tar -tzf "$RUNNER_TEMP/dl/alhajda-update-${ALHAJDA_VERSION}.tar.gz" | grep -q 'overlay/usr/local/bin/alhajda-update'
+          tar -tzf "$RUNNER_TEMP/dl/alhajda-update-${ALHAJDA_VERSION}.tar.gz" > "$RUNNER_TEMP/dl/list.txt"
+          grep 'overlay/usr/local/bin/alhajda-update' "$RUNNER_TEMP/dl/list.txt"
