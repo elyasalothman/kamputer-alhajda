@@ -25,6 +25,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Repo copy of install-alhajda-vm.ps1 -DryRun (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File os/windows/install-alhajda-vm.ps1 -DryRun *>&1 | Tee-Object -FilePath repo-dry.txt
+          if (-not (Select-String -Path repo-dry.txt -Pattern 'ALHAJDA_DRYRUN release=os-v' -Quiet)) { Write-Host '::error::repo installer dry run failed'; exit 1 }
+
       - name: One-line command from alhajda.com (Windows PowerShell 5.1)
         shell: powershell
         run: |

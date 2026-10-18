@@ -1,0 +1,35 @@
+name: Refresh Windows installer files on an Alhajda OS release
+
+# Re-uploads AlhajdaSetup.cmd / os.ps1 / install-alhajda-vm.ps1 from main onto an existing os-v*
+# release (no image rebuild) and rewrites their lines in SHA256SUMS. Image hashes stay untouched.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. os-v1.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Re-upload installer files + fix SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          case "$TAG" in os-v*) ;; *) echo "::error::tag must start with os-v"; exit 1;; esac
+          d=$(mktemp -d)
+          cp os/windows/AlhajdaSetup.cmd os/windows/os.ps1 os/windows/install-alhajda-vm.ps1 "$d/"
+          gh release download "$TAG" -p SHA256SUMS -D "$d" --repo "$GITHUB_REPOSITORY"
+          cd "$d"
+          grep -vE '  (AlhajdaSetup\.cmd|os\.ps1|install-alhajda-vm\.ps1)$' SHA256SUMS > SHA256SUMS.new || true
+          sha256sum AlhajdaSetup.cmd os.ps1 install-alhajda-vm.ps1 >> SHA256SUMS.new
+          mv SHA256SUMS.new SHA256SUMS
+          cat SHA256SUMS
+          gh release upload "$TAG" AlhajdaSetup.cmd os.ps1 install-alhajda-vm.ps1 SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"

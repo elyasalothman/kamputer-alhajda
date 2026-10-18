@@ -165,7 +165,11 @@ Say ("حالة Hyper-V: {0} — سيتم استخدام: {1}" -f $hv, $choice) (
 if ($DryRun) {
   $sfx = if ($choice -eq 'HyperV') { '-hyperv.vhdx.zip' } else { '-virtualbox.vmdk' }
   if ($Tag) { $r = Invoke-RestMethod -Headers $ghHeaders -Uri "https://api.github.com/repos/$Repo/releases/tags/$Tag" }
-  else { $r = Invoke-RestMethod -Headers $ghHeaders -Uri "https://api.github.com/repos/$Repo/releases?per_page=50" | Where-Object { $_.tag_name -like 'os-v*' -and -not $_.draft } | Select-Object -First 1 }
+  else {
+    # assign first: Windows PowerShell 5.1 passes a JSON array down the pipeline as ONE object
+    $all = Invoke-RestMethod -Headers $ghHeaders -Uri "https://api.github.com/repos/$Repo/releases?per_page=50"
+    $r = $all | Where-Object { $_.tag_name -like 'os-v*' -and -not $_.draft } | Select-Object -First 1
+  }
   if (-not $r) { throw 'no os-v* release found' }
   $files = @($r.assets | Where-Object { $_.name -like "*$sfx" -or $_.name -like "*$sfx.part*" })
   $sums = $r.assets | Where-Object { $_.name -eq 'SHA256SUMS' }
