@@ -55,6 +55,12 @@ if [ ${#missing[@]} -gt 0 ]; then
   DEBIAN_FRONTEND=noninteractive apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q "${missing[@]}" || log "WARN: apt install failed"
 fi
 
+# --- wired network: 1.0.0 left ethernet unmanaged; the overlay now fixes that ---
+if command -v nmcli >/dev/null && nmcli -t -f TYPE,STATE device 2>/dev/null | grep -q '^ethernet:unmanaged'; then
+  log "restarting NetworkManager to manage ethernet"
+  systemctl try-restart NetworkManager.service || true
+fi
+
 # --- units ---
 systemctl daemon-reload || true
 systemctl enable alhajda-update.timer 2>/dev/null || true

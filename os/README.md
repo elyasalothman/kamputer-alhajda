@@ -164,6 +164,7 @@ os/
 
 ## ملاحظات وحدود معروفة
 
+- **1.1.0:** إصلاح الشبكة السلكية داخل الأجهزة الافتراضية (كانت بطاقة الإيثرنت غير مُدارة من NetworkManager في 1.0.0 فلا يتصل الجهاز بالإنترنت). أداة التحديث تطبّق الإصلاح على نسخ 1.0.0 أيضاً — لكنها تحتاج إنترنت؛ إن لم يكن متاحاً نفّذ مرة واحدة: `sudo touch /etc/NetworkManager/conf.d/10-globally-managed-devices.conf && sudo systemctl restart NetworkManager`.
 - لا يوجد مثبّت رسومي (Ubiquity/Calamares) في هذا الإصدار الأول؛ الطريقة الأساسية هي القرص الافتراضي الجاهز، والتثبيت الدائم عبر `alhajda-install-disk` تجريبي.
 - Chromium في أوبونتو متاح كـ Snap فقط، لذلك اعتمدنا Firefox (deb).
 - Secure Boot: القرص الافتراضي يحمل shim موقّعاً من Microsoft، لكن السكربت يعطّل Secure Boot في Hyper-V للتوافق. ملف ISO غير موقّع (عطّل Secure Boot عند إقلاعه).

@@ -38,14 +38,15 @@ if [ -n "$api" ] && [ "$mode" = disk ]; then
   timer=$(systemctl is-enabled alhajda-update.timer 2>/dev/null)
   uupkg=$(dpkg-query -W -f='${Status}' unattended-upgrades 2>/dev/null | grep -q 'ok installed' && echo yes || echo no)
   marker=no; [ -f /usr/share/alhajda/selftest-applied ] && marker=yes
-  detail="before=${before} after=${after} os-release=${osver} marker=${marker} userdata=$([ -n "${sum_before:-}" ] && [ "${sum_before:-}" = "${sum_after:-}" ] && echo kept || echo CHANGED) unattended=${uu:-?} uu_pkg=${uupkg} timer=${timer:-?}"
+  net=down; ip route 2>/dev/null | grep -q '^default' && net=up
+  detail="net=${net} before=${before} after=${after} os-release=${osver} marker=${marker} userdata=$([ -n "${sum_before:-}" ] && [ "${sum_before:-}" = "${sum_after:-}" ] && echo kept || echo CHANGED) unattended=${uu:-?} uu_pkg=${uupkg} timer=${timer:-?}"
   if [ "$before" != "$after" ] && [ "$marker" = yes ] && [ "$after" = "$osver" ] && [ "${sum_before:-x}" = "${sum_after:-y}" ] \
      && [ "${uu:-0}" = 1 ] && [ "$uupkg" = yes ] && [ "$timer" = enabled ]; then
     update_line="ALHAJDA_UPDATE_OK ${detail}"
   else
     update_line="ALHAJDA_UPDATE_FAIL ${detail}"
   fi
-  update_out=$(printf '%s\n' "$out" | tail -n 25 | sed 's/^/  [alhajda-update] /')
+  update_out=$( { printf '%s\n' "$out" | tail -n 25; nmcli -t -f DEVICE,TYPE,STATE device 2>/dev/null; ip -br addr 2>/dev/null; } | sed 's/^/  [alhajda-update] /')
 fi
 name=$(. /etc/os-release; echo "$PRETTY_NAME")
 msg="ALHAJDA_BOOT_OK mode=${mode} display-manager=${state} xkb=$(. /etc/default/keyboard; echo "$XKBLAYOUT") locale=$(. /etc/default/locale; echo "$LANG") os=\"${name}\""
