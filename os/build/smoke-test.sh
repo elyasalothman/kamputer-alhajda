@@ -14,8 +14,10 @@ ACCEL=(-accel tcg)
 if [ -w /dev/kvm ]; then ACCEL=(-enable-kvm -cpu host); fi
 FWARGS=()
 if [ "$FW" = "uefi" ]; then
-  CODE=$(ls /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd 2>/dev/null | head -n1)
-  VARS_SRC=$(ls /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd 2>/dev/null | head -n1)
+  CODE="" VARS_SRC=""
+  for f in /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd; do [ -f "$f" ] && { CODE=$f; break; }; done
+  for f in /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd; do [ -f "$f" ] && { VARS_SRC=$f; break; }; done
+  [ -n "$CODE" ] && [ -n "$VARS_SRC" ] || { echo "::error::OVMF firmware not found"; ls -l /usr/share/OVMF || true; exit 1; }
   cp "${VARS_SRC}" "${LOGDIR}/${NAME}-vars.fd"
   FWARGS=(-drive "if=pflash,format=raw,readonly=on,file=${CODE}" -drive "if=pflash,format=raw,file=${LOGDIR}/${NAME}-vars.fd")
 fi
