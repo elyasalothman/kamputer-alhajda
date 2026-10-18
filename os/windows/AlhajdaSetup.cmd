@@ -4,7 +4,8 @@ rem Same as running in PowerShell:  irm https://alhajda.com/os.ps1 ^| iex
 rem Optional arguments are passed to the installer, e.g.:  AlhajdaSetup.cmd -MemoryGB 6 -DiskGB 80
 title Alhajda OS Setup
 setlocal
-set "ALHAJDA_ARGS=%*"
+rem keep ALHAJDA_ARGS from the environment unless arguments were given
+if not "%~1"=="" set "ALHAJDA_ARGS=%*"
 echo.
 echo   Alhajda OS setup - alhajda.com/os
 echo   Windows will ask for Administrator approval. Choose "Yes".
