@@ -17,8 +17,14 @@ trap cleanup EXIT
 log "debootstrap ${UBUNTU_SUITE} -> ${CHROOT}"
 rm -rf "${CHROOT}"
 mkdir -p "${CHROOT}" "${OUT}"
-debootstrap --arch=amd64 --components=main,restricted,universe,multiverse \
-  "${UBUNTU_SUITE}" "${CHROOT}" "${UBUNTU_MIRROR}"
+# mirrors occasionally drop a package mid-download: retry a few times
+for attempt in 1 2 3; do
+  if debootstrap --arch=amd64 --components=main,restricted,universe,multiverse \
+       "${UBUNTU_SUITE}" "${CHROOT}" "${UBUNTU_MIRROR}"; then break; fi
+  [ "$attempt" = 3 ] && { echo "debootstrap failed 3 times"; exit 1; }
+  echo "debootstrap failed (attempt ${attempt}), retrying in 20s"; sleep 20
+  rm -rf "${CHROOT}"; mkdir -p "${CHROOT}"
+done
 
 log "copy rootfs overlay + branding"
 rsync -a "${OS_DIR}/rootfs-overlay/" "${CHROOT}/"

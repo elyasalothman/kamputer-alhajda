@@ -13,6 +13,8 @@ chmod +x /usr/sbin/policy-rc.d
 echo alhajda > /etc/hostname
 printf '127.0.0.1\tlocalhost\n127.0.1.1\talhajda\n::1\tlocalhost ip6-localhost ip6-loopback\n' > /etc/hosts
 
+printf 'Acquire::Retries "5";\n' > /etc/apt/apt.conf.d/80-alhajda-retries
+
 # ---------- APT sources (deb822) ----------
 : > /etc/apt/sources.list
 cat > /etc/apt/sources.list.d/ubuntu.sources <<EOF
